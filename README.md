@@ -11,7 +11,7 @@ gc4.ai SDK generator consumes.
 
 - **3 operations:** `chat.send` (`POST /v1/chat/completions`), `completions.create`
   (`POST /v1/completions`), `models.list` (`GET /v1/models`).
-- **OpenAI / OpenRouter-compatible** request and response shapes.
+- **OpenAI-compatible** request and response shapes.
 - **Auth:** HTTP Bearer (`Authorization: Bearer <gc4.ai API key>`).
 - **Server:** `https://gc4.ai`.
 - **Streaming:** Server-Sent Events keyed on the request's `stream` field. Each event
