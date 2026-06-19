@@ -1,0 +1,1370 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "gc4.ai API",
+    "version": "0.1.0",
+    "description": "OpenRouter-compatible inference API for gc4.ai. Access 400+ models through one unified, OpenAI-compatible surface — paid for with gift cards. Streaming is Server-Sent Events keyed on `stream`; a mid-stream failure is an in-band HTTP-200 error (`finish_reason:\"error\"`)."
+  },
+  "servers": [
+    {
+      "url": "https://gc4.ai",
+      "description": "Production"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Chat",
+      "description": "Chat completions."
+    },
+    {
+      "name": "Completions",
+      "description": "Legacy text completions."
+    },
+    {
+      "name": "Models",
+      "description": "Model catalog."
+    }
+  ],
+  "paths": {
+    "/v1/chat/completions": {
+      "post": {
+        "operationId": "chat.send",
+        "summary": "Create a chat completion",
+        "description": "OpenAI-compatible chat completions. Set `stream:true` for an SSE stream (`text/event-stream`); otherwise a single `chat.completion` JSON body. A mid-stream provider failure stays HTTP-200 with an in-band `error` + `finish_reason:\"error\"`.",
+        "tags": [
+          "Chat"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatCompletionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A chat completion, keyed on the request's `stream` field. `application/json` (a single `chat.completion`) when `stream:false`. `text/event-stream` (SSE) when `stream:true`: each event is a `data: <json>\\n\\n` line carrying one streamed chunk (the dual `{choices[].delta}` | `{response}` shape); the terminal data event carries the `usage` frame (incl. `cost`); the stream ends with the literal `data: [DONE]` sentinel. A mid-stream failure arrives as a chunk with `error` + `finish_reason:\"error\"` — HTTP stays 200.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatCompletion"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionChunk"
+                    },
+                    {
+                      "type": "object",
+                      "description": "A provider-native streamed fragment (some Workers AI models stream `{response:\"…\"}` rather than the OpenAI `{choices[].delta}` shape). The client normalizes both.",
+                      "properties": {
+                        "response": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "response"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "408": {
+            "$ref": "#/components/responses/UpstreamTimeout"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/ProviderUnavailable"
+          },
+          "503": {
+            "$ref": "#/components/responses/ProviderUnavailable"
+          }
+        }
+      }
+    },
+    "/v1/completions": {
+      "post": {
+        "operationId": "completions.create",
+        "summary": "Create a (legacy) text completion",
+        "description": "OpenAI-compatible legacy text completions. Set `stream:true` for an SSE stream of `text_completion` events; otherwise a single `text_completion` JSON body. Same in-band-200 error channel as chat.",
+        "tags": [
+          "Completions"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompletionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A text completion. `application/json` when `stream:false`; `text/event-stream` (SSE) when `stream:true`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TextCompletion"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/TextCompletionChunk"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "408": {
+            "$ref": "#/components/responses/UpstreamTimeout"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/ProviderUnavailable"
+          },
+          "503": {
+            "$ref": "#/components/responses/ProviderUnavailable"
+          }
+        }
+      }
+    },
+    "/v1/models": {
+      "get": {
+        "operationId": "models.list",
+        "summary": "List available models",
+        "description": "The OpenRouter-compatible model catalog (the bare `{ data: [...] }` shape), behind the same Bearer gate as the inference endpoints.",
+        "tags": [
+          "Models"
+        ],
+        "responses": {
+          "200": {
+            "description": "The list of available models.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "A gc4.ai API key, sent as `Authorization: Bearer <key>`. A missing, malformed, invalid, revoked, or frozen key all return the same 401."
+      }
+    },
+    "schemas": {
+      "Usage": {
+        "type": "object",
+        "properties": {
+          "prompt_tokens": {
+            "type": "number"
+          },
+          "completion_tokens": {
+            "type": "number"
+          },
+          "total_tokens": {
+            "type": "number"
+          },
+          "cost": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "prompt_tokens",
+          "completion_tokens",
+          "total_tokens",
+          "cost"
+        ],
+        "additionalProperties": false
+      },
+      "InBandError": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "metadata": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "message",
+          "type",
+          "code"
+        ],
+        "additionalProperties": false
+      },
+      "ContentPart": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "text"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": {}
+      },
+      "ChatCompletionRequest": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The model id to route to (e.g. `meta/llama-4-scout`). Required, non-empty."
+          },
+          "messages": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "default": "user",
+                  "type": "string",
+                  "enum": [
+                    "system",
+                    "user",
+                    "assistant",
+                    "tool"
+                  ]
+                },
+                "content": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "array",
+                          "items": {}
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                },
+                "tool_call_id": {
+                  "type": "string"
+                },
+                "tool_calls": {
+                  "type": "array",
+                  "items": {}
+                }
+              },
+              "required": [
+                "role"
+              ],
+              "additionalProperties": {}
+            },
+            "description": "The conversation so far. Required, non-empty."
+          },
+          "stream": {
+            "description": "Stream the completion as Server-Sent Events. The live handler coerces any non-`true` value to `false` (never rejects).",
+            "default": false,
+            "type": "boolean"
+          },
+          "max_tokens": {
+            "description": "Completion-token ceiling. A non-number is silently dropped by the live handler (never rejected).",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "tools": {
+            "description": "OpenAI tools array, forwarded to the provider. A non-array value is ignored by the live handler (never rejected).",
+            "type": "array",
+            "items": {}
+          },
+          "tool_choice": {}
+        },
+        "required": [
+          "model",
+          "messages"
+        ],
+        "additionalProperties": {},
+        "description": "OpenAI-compatible chat-completions request. The live handler is LENIENT: it rejects (400) only structural problems (missing/empty model or messages, a non-object message, an image_url content part) and COERCES bad primitives (unknown role → user, non-true stream → false, non-number max_tokens dropped, non-array tools ignored). Unknown top-level fields are accepted and ignored."
+      },
+      "CompletionRequest": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The model id to route to. Required, non-empty."
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ],
+            "description": "The prompt: a non-empty string or a non-empty array of strings (joined into one prompt). Token-array prompts are unsupported (no in-worker tokenizer)."
+          },
+          "stream": {
+            "description": "Stream as SSE. Any non-`true` value coerces to `false` (never rejected).",
+            "default": false,
+            "type": "boolean"
+          },
+          "max_tokens": {
+            "description": "Completion-token ceiling. A non-number is silently dropped.",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "model",
+          "prompt"
+        ],
+        "additionalProperties": {},
+        "description": "OpenAI-compatible legacy text-completions request. Lenient like the chat endpoint: rejects (400) only structural problems (missing/empty model, a missing/empty or token-array prompt) and accepts-and-ignores every other legacy sampling param."
+      },
+      "ChatCompletion": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string",
+            "const": "chat.completion"
+          },
+          "created": {
+            "type": "number"
+          },
+          "model": {
+            "type": "string"
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "index": {
+                  "type": "number"
+                },
+                "message": {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "const": "assistant"
+                    },
+                    "content": {
+                      "type": "string"
+                    },
+                    "tool_calls": {
+                      "type": "array",
+                      "items": {}
+                    }
+                  },
+                  "required": [
+                    "role",
+                    "content"
+                  ],
+                  "additionalProperties": false
+                },
+                "finish_reason": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "error"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "index",
+                "message",
+                "finish_reason"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          },
+          "error": {
+            "$ref": "#/components/schemas/InBandError"
+          }
+        },
+        "required": [
+          "id",
+          "object",
+          "created",
+          "model",
+          "choices"
+        ],
+        "additionalProperties": false,
+        "description": "Non-stream chat completion. May carry an in-band `error` (with `choices[].finish_reason:\"error\"`) on a mid-stream provider failure — the HTTP status stays 200."
+      },
+      "ChatCompletionChunk": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string",
+            "const": "chat.completion.chunk"
+          },
+          "created": {
+            "type": "number"
+          },
+          "model": {
+            "type": "string"
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "index": {
+                  "type": "number"
+                },
+                "delta": {
+                  "type": "object",
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "const": "assistant"
+                    },
+                    "content": {
+                      "type": "string"
+                    },
+                    "tool_calls": {
+                      "type": "array",
+                      "items": {}
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "finish_reason": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "error"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "index",
+                "delta",
+                "finish_reason"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          },
+          "error": {
+            "$ref": "#/components/schemas/InBandError"
+          }
+        },
+        "required": [
+          "id",
+          "object",
+          "created",
+          "model",
+          "choices"
+        ],
+        "additionalProperties": false,
+        "description": "One streamed `chat.completion.chunk` SSE event. The terminal event carries `usage` (incl. `cost`); an `error` event is the in-band HTTP-200 failure channel."
+      },
+      "TextCompletion": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string",
+            "const": "text_completion"
+          },
+          "created": {
+            "type": "number"
+          },
+          "model": {
+            "type": "string"
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "index": {
+                  "type": "number"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "finish_reason": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "error"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "logprobs": {
+                  "type": "null"
+                }
+              },
+              "required": [
+                "index",
+                "text",
+                "finish_reason",
+                "logprobs"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          },
+          "error": {
+            "$ref": "#/components/schemas/InBandError"
+          }
+        },
+        "required": [
+          "id",
+          "object",
+          "created",
+          "model",
+          "choices"
+        ],
+        "additionalProperties": false,
+        "description": "Legacy non-stream text completion. Carries the same in-band `usage`/`error` channel as chat; `logprobs` is always `null`."
+      },
+      "TextCompletionChunk": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "object": {
+            "type": "string",
+            "const": "text_completion"
+          },
+          "created": {
+            "type": "number"
+          },
+          "model": {
+            "type": "string"
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "index": {
+                  "type": "number"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "finish_reason": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "stop",
+                        "length",
+                        "tool_calls",
+                        "error"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "logprobs": {
+                  "type": "null"
+                }
+              },
+              "required": [
+                "index",
+                "text",
+                "finish_reason",
+                "logprobs"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          },
+          "error": {
+            "$ref": "#/components/schemas/InBandError"
+          }
+        },
+        "required": [
+          "id",
+          "object",
+          "created",
+          "model",
+          "choices"
+        ],
+        "additionalProperties": false
+      },
+      "ModelsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "object": {
+                  "type": "string",
+                  "const": "model"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "context_length": {
+                  "type": "number"
+                },
+                "pricing": {
+                  "type": "object",
+                  "properties": {
+                    "prompt": {
+                      "type": "string"
+                    },
+                    "completion": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "prompt",
+                    "completion"
+                  ],
+                  "additionalProperties": false
+                },
+                "architecture": {
+                  "type": "object",
+                  "properties": {
+                    "modality": {
+                      "type": "string",
+                      "const": "text->text"
+                    },
+                    "input_modalities": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "output_modalities": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "modality",
+                    "input_modalities",
+                    "output_modalities"
+                  ],
+                  "additionalProperties": false
+                },
+                "supported_parameters": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "object",
+                "name",
+                "context_length",
+                "pricing",
+                "architecture",
+                "supported_parameters"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "additionalProperties": false,
+        "description": "The bare `{ data: [...] }` OpenRouter models list. Pricing is a USD-per-token string; `architecture` is the shared text-only constant."
+      },
+      "HttpErrorEnvelope": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "code": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "metadata": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "message",
+              "type",
+              "code"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false,
+        "description": "The bare OpenAI error envelope. `error.code` is the numeric HTTP status."
+      },
+      "UnauthorizedError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "authentication_error"
+              },
+              "code": {
+                "type": "number",
+                "const": 401
+              }
+            },
+            "required": [
+              "message",
+              "type",
+              "code"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false,
+        "description": "Missing/malformed/invalid/revoked/frozen key — one non-disclosing 401 for all."
+      },
+      "InsufficientCreditsError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "insufficient_quota"
+              },
+              "code": {
+                "type": "number",
+                "const": 402
+              },
+              "metadata": {
+                "type": "object",
+                "properties": {
+                  "balance": {
+                    "type": "string"
+                  },
+                  "balance_micro": {
+                    "type": "number"
+                  },
+                  "top_up_url": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "balance",
+                  "balance_micro",
+                  "top_up_url"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "message",
+              "type",
+              "code",
+              "metadata"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false,
+        "description": "Out of credits. `metadata` carries the authoritative balance (USD display + raw micro-USD) and the top-up URL."
+      },
+      "SpendCapError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "insufficient_quota"
+              },
+              "code": {
+                "type": "number",
+                "const": 402
+              },
+              "metadata": {
+                "type": "object",
+                "properties": {
+                  "cap_micro": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "cap_micro"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "message",
+              "type",
+              "code"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false,
+        "description": "Per-key spend cap exceeded. A DISTINCT message from out-of-credits; carries no balance (optional `cap_micro` only)."
+      },
+      "UnknownModelError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "invalid_request_error"
+              },
+              "code": {
+                "type": "number",
+                "const": 404
+              },
+              "metadata": {
+                "type": "object",
+                "properties": {
+                  "suggestion": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "suggestion"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "message",
+              "type",
+              "code"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false,
+        "description": "The requested model id does not exist. `metadata.suggestion` (when present) is the nearest-id 'Did you mean' hint."
+      },
+      "UnknownEndpointError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "invalid_request_error"
+              },
+              "code": {
+                "type": "number",
+                "const": 404
+              }
+            },
+            "required": [
+              "message",
+              "type",
+              "code"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false,
+        "description": "An authenticated but unmatched `/v1/*` path (no metadata)."
+      },
+      "UpstreamTimeoutError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "timeout"
+              },
+              "code": {
+                "type": "number",
+                "const": 408
+              },
+              "metadata": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "message",
+              "type",
+              "code",
+              "metadata"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false,
+        "description": "The upstream provider did not respond in time; names the provider."
+      },
+      "RateLimitError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "rate_limit_exceeded"
+              },
+              "code": {
+                "type": "number",
+                "const": 429
+              },
+              "metadata": {
+                "type": "object",
+                "properties": {
+                  "retry_after": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "retry_after"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "message",
+              "type",
+              "code",
+              "metadata"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false,
+        "description": "Rate limit exceeded. Mirrors `retry_after` (seconds) in `metadata` AND sets the HTTP `Retry-After` response header."
+      },
+      "InvalidRequestError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "invalid_request_error"
+              },
+              "code": {
+                "type": "number",
+                "const": 400
+              }
+            },
+            "required": [
+              "message",
+              "type",
+              "code"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false,
+        "description": "A malformed request (bad JSON, the lenient-parse structural 400, the tool-capability 400)."
+      },
+      "ProviderUnavailable502Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "api_error"
+              },
+              "code": {
+                "type": "number",
+                "const": 502
+              },
+              "metadata": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "message",
+              "type",
+              "code",
+              "metadata"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false,
+        "description": "The selected model is temporarily unavailable (502); names the provider."
+      },
+      "ProviderUnavailable503Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "api_error"
+              },
+              "code": {
+                "type": "number",
+                "const": 503
+              },
+              "metadata": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "message",
+              "type",
+              "code",
+              "metadata"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false,
+        "description": "The selected model is temporarily unavailable (503); names the provider."
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Missing, malformed, invalid, revoked, or frozen API key (one non-disclosing 401).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/UnauthorizedError"
+            }
+          }
+        }
+      },
+      "InvalidRequest": {
+        "description": "A malformed/invalid request (bad JSON, a structural parse 400, the tool-capability 400).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/InvalidRequestError"
+            }
+          }
+        }
+      },
+      "PaymentRequired": {
+        "description": "Payment required: out of credits (carries balance + top-up URL) OR the per-key spend cap was exceeded (a distinct message, no balance). Branch on `oneOf`.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/InsufficientCreditsError"
+                },
+                {
+                  "$ref": "#/components/schemas/SpendCapError"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Not found: the requested model does not exist (optional nearest-id suggestion) OR an unmatched `/v1/*` endpoint. Branch on `oneOf`.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/UnknownModelError"
+                },
+                {
+                  "$ref": "#/components/schemas/UnknownEndpointError"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "UpstreamTimeout": {
+        "description": "The upstream provider did not respond in time.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/UpstreamTimeoutError"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Rate limit exceeded. The `Retry-After` header + `metadata.retry_after` give the wait.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/RateLimitError"
+            }
+          }
+        },
+        "headers": {
+          "Retry-After": {
+            "description": "Seconds to wait before retrying (mirrors `metadata.retry_after`).",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        }
+      },
+      "ProviderUnavailable": {
+        "description": "The selected model is temporarily unavailable (502 or 503; names the provider).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ProviderUnavailable502Error"
+                },
+                {
+                  "$ref": "#/components/schemas/ProviderUnavailable503Error"
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}
