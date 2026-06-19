@@ -34,7 +34,7 @@ gc4.ai SDK generator consumes.
 
 ```bash
 curl https://gc4.ai/v1/chat/completions \
-  -H "Authorization: Bearer $GC4_API_KEY" \
+  -H "Authorization: Bearer $GC4AI_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"model":"meta/llama-3.1-8b","messages":[{"role":"user","content":"Hello"}],"max_tokens":16}'
 ```
